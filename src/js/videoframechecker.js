@@ -17,9 +17,7 @@ function VideoFrameChecker(videoElement) {
 
   this.running_ = true;
 
-  this.nonBlackPixelLumaThreshold = 20;
   this.previousFrame_ = [];
-  this.identicalFrameSsimThreshold = 0.985;
   this.frameComparator = new Ssim();
 
   this.canvas_ = document.createElement('canvas');
@@ -27,6 +25,24 @@ function VideoFrameChecker(videoElement) {
   this.listener_ = this.checkVideoFrame_.bind(this);
   this.videoElement_.addEventListener('play', this.listener_, false);
 }
+
+/* static methods and constants */
+VideoFrameChecker.nonBlackPixelLumaThreshold = 20;
+VideoFrameChecker.identicalFrameSsimThreshold = 0.985;
+VideoFrameChecker.isBlackFrame = function(data, length) {
+  // TODO: Use a statistical, histogram-based detection.
+  var thresh = VideoFrameChecker.nonBlackPixelLumaThreshold;
+  var accuLuma = 0;
+  for (var i = 4; i < length; i += 4) {
+    // Use Luma as in Rec. 709: Y′709 = 0.21R + 0.72G + 0.07B;
+    accuLuma += 0.21 * data[i] + 0.72 * data[i + 1] + 0.07 * data[i + 2];
+    // Early termination if the average Luma so far is bright enough.
+    if (accuLuma > (thresh * i / 4)) {
+      return false;
+    }
+  }
+  return true;
+};
 
 VideoFrameChecker.prototype = {
   stop: function() {
@@ -54,33 +70,18 @@ VideoFrameChecker.prototype = {
 
     var imageData = this.getCurrentImageData_();
 
-    if (this.isBlackFrame_(imageData.data, imageData.data.length)) {
+    if (VideoFrameChecker.isBlackFrame(imageData.data, imageData.data.length)) {
       this.frameStats.numBlackFrames++;
     }
 
     if (this.frameComparator.calculate(this.previousFrame_, imageData.data) >
-        this.identicalFrameSsimThreshold) {
+        VideoFrameChecker.identicalFrameSsimThreshold) {
       this.frameStats.numFrozenFrames++;
     }
     this.previousFrame_ = imageData.data;
 
     this.frameStats.numFrames++;
     setTimeout(this.checkVideoFrame_.bind(this), 20);
-  },
-
-  isBlackFrame_: function(data, length) {
-    // TODO: Use a statistical, histogram-based detection.
-    var thresh = this.nonBlackPixelLumaThreshold;
-    var accuLuma = 0;
-    for (var i = 4; i < length; i += 4) {
-      // Use Luma as in Rec. 709: Y′709 = 0.21R + 0.72G + 0.07B;
-      accuLuma += 0.21 * data[i] + 0.72 * data[i + 1] + 0.07 * data[i + 2];
-      // Early termination if the average Luma so far is bright enough.
-      if (accuLuma > (thresh * i / 4)) {
-        return false;
-      }
-    }
-    return true;
   }
 };
 
